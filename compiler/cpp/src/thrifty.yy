@@ -142,6 +142,7 @@ const int struct_is_union = 1;
  * Function modifiers
  */
 %token tok_oneway
+%token tok_nullable
 
 /**
  * Thrift language keywords
@@ -213,6 +214,7 @@ const int struct_is_union = 1;
 %type<tstruct>   Throws
 %type<tservice>  Extends
 %type<tbool>     Oneway
+%type<tbool>     Nullable
 %type<tbool>     XsdAll
 %type<tbool>     XsdOptional
 %type<tbool>     XsdNillable
@@ -858,16 +860,16 @@ FunctionList:
     }
 
 Function:
-  CaptureDocText Oneway FunctionType tok_identifier '(' FieldList ')' Throws TypeAnnotations CommaOrSemicolonOptional
+  CaptureDocText Oneway Nullable FunctionType tok_identifier '(' FieldList ')' Throws TypeAnnotations CommaOrSemicolonOptional
     {
-      $6->set_name(std::string($4) + "_args");
-      $$ = new t_function($3, $4, $6, $8, $2);
+      $7->set_name(std::string($5) + "_args");
+      $$ = new t_function($4, $5, $7, $9, $2, $3);
       if ($1 != NULL) {
         $$->set_doc($1);
       }
-      if ($9 != NULL) {
-        $$->annotations_ = $9->annotations_;
-        delete $9;
+      if ($10 != NULL) {
+        $$->annotations_ = $10->annotations_;
+        delete $10;
       }
     }
 
@@ -880,6 +882,17 @@ Oneway:
     {
       $$ = false;
     }
+
+Nullable:
+  tok_nullable
+    {
+      $$ = true;
+    }
+|
+    {
+      $$ = false;
+    }
+
 
 Throws:
   tok_throws '(' FieldList ')'

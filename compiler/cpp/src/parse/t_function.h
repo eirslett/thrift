@@ -36,11 +36,13 @@ class t_function : public t_doc {
   t_function(t_type* returntype,
              std::string name,
              t_struct* arglist,
-             bool oneway=false) :
+             bool oneway=false,
+             bool nullable=false) :
     returntype_(returntype),
     name_(name),
     arglist_(arglist),
-    oneway_(oneway) {
+    oneway_(oneway),
+    nullable_(nullable) {
     xceptions_ = new t_struct(NULL);
   }
 
@@ -48,12 +50,14 @@ class t_function : public t_doc {
              std::string name,
              t_struct* arglist,
              t_struct* xceptions,
-             bool oneway=false) :
+             bool oneway=false,
+             bool nullable=false) :
     returntype_(returntype),
     name_(name),
     arglist_(arglist),
     xceptions_(xceptions),
-    oneway_(oneway)
+    oneway_(oneway),
+    nullable_(nullable)
   {
     if (oneway_ && !xceptions_->get_members().empty()) {
       throw std::string("Oneway methods can't throw exceptions.");
@@ -82,6 +86,10 @@ class t_function : public t_doc {
     return oneway_;
   }
 
+  bool is_nullable() const {
+    return nullable_;
+  }
+
   std::map<std::string, std::string> annotations_;
 
  private:
@@ -90,6 +98,7 @@ class t_function : public t_doc {
   t_struct* arglist_;
   t_struct* xceptions_;
   bool oneway_;
+  bool nullable_;
 };
 
 #endif
