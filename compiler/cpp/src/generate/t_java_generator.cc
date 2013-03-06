@@ -3367,6 +3367,11 @@ string t_java_generator::function_signature(t_function* tfunction,
     result += type_name((*x_iter)->get_type(), false, false) + ", ";
   }
   result += "org.apache.thrift.TException";
+
+  if (tfunction->is_nullable()) {
+	  result += "// nullable";
+  }
+
   return result;
 }
 
