@@ -78,6 +78,9 @@ public:
       android_legacy_ = true;
     }
 
+	iter = parsed_options.find("option_type");
+	use_option_type_ = (iter != parsed_options.end());
+
     out_dir_base_ = (bean_style_ ? "gen-javabean" : "gen-java");
   }
 
@@ -303,6 +306,7 @@ public:
   bool android_legacy_;
   bool java5_;
   bool sorted_containers_;
+  bool use_option_type_;
 };
 
 
@@ -353,6 +357,7 @@ string t_java_generator::java_package() {
 string t_java_generator::java_type_imports() {
   string hash_builder;
   string tree_set_and_map;
+  string option;
   if (gen_hash_code_) {
     hash_builder = "import org.apache.commons.lang.builder.HashCodeBuilder;\n";
   }
@@ -360,6 +365,11 @@ string t_java_generator::java_type_imports() {
     tree_set_and_map = string() + 
       "import java.util.TreeSet;\n" +
       "import java.util.TreeMap;\n";
+  }
+
+  if (use_option_type_) {
+    option = string() +
+      "import org.apache.thrift.Option;\n";
   }
 
   return
@@ -372,6 +382,7 @@ string t_java_generator::java_type_imports() {
     "import org.apache.thrift.protocol.TTupleProtocol;\n" +
     "import org.apache.thrift.protocol.TProtocolException;\n" +
     "import org.apache.thrift.EncodingUtils;\n" +
+    option +
     "import org.apache.thrift.TException;\n" +
     "import java.util.List;\n" +
     "import java.util.ArrayList;\n" +
@@ -1735,15 +1746,7 @@ void t_java_generator::generate_java_struct_field_by_id(ofstream& out, t_struct*
 void t_java_generator::generate_reflection_getters(ostringstream& out, t_type* type, string field_name, string cap_name) {
   indent(out) << "case " << constant_name(field_name) << ":" << endl;
   indent_up();
-
-  if (type->is_base_type() && !type->is_string()) {
-    t_base_type* base_type = (t_base_type*)type;
-
-    indent(out) << "return " << type_name(type, true, false) << ".valueOf(" << (base_type->is_bool() ? "is" : "get") << cap_name << "());" << endl << endl;
-  } else {
-    indent(out) << "return get" << cap_name << "();" << endl << endl;
-  }
-
+  indent(out) << "return " << (type->is_bool() ? "is" : "get") << cap_name << "();" << endl << endl;
   indent_down();
 }
 
@@ -1844,17 +1847,36 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out,
     t_type* type = get_true_type(field->get_type());
     std::string field_name = field->get_name();
     std::string cap_name = get_cap_name(field_name);
+	bool optional = use_option_type_ && field->get_req() == t_field::e_req::T_OPTIONAL;
 
     if (type->is_container()) {
       // Method to return the size of the collection
-      indent(out) << "public int get" << cap_name;
-      out << get_cap_name("size() {") << endl;
+      if (optional) {
+        indent(out) << "public Option<Integer> get" << cap_name;
+        out << get_cap_name("size() {") << endl;
 
-      indent_up();
-      indent(out) << "return (this." << field_name << " == null) ? 0 : " <<
-        "this." << field_name << ".size();" << endl;
-      indent_down();
-      indent(out) << "}" << endl << endl;
+        indent_up();
+        indent(out) << "if (this." << field_name << " == null) {" << endl;
+        indent_up();
+        indent(out) << "return Option.none();" << endl;
+        indent_down();
+        indent(out) << "} else {" << endl;
+        indent_up();
+        indent(out) << "return Option.some(this." << field_name << ".size());" << endl;
+        indent_down();
+        indent(out) << "}" << endl;
+        indent_down();
+        indent(out) << "}" << endl << endl;
+      } else {
+        indent(out) << "public int get" << cap_name;
+        out << get_cap_name("size() {") << endl;
+
+        indent_up();
+        indent(out) << "return (this." << field_name << " == null) ? 0 : " <<
+          "this." << field_name << ".size();" << endl;
+        indent_down();
+        indent(out) << "}" << endl << endl;
+      }
     }
 
     if (type->is_set() || type->is_list()) {
@@ -1866,15 +1888,34 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out,
       }
 
       // Iterator getter for sets and lists
-      indent(out) << "public java.util.Iterator<" <<
-        type_name(element_type, true, false) <<  "> get" << cap_name;
-      out << get_cap_name("iterator() {") << endl;
+      if (optional) {
+        indent(out) << "public Option<java.util.Iterator<" <<
+          type_name(element_type, true, false) <<  ">> get" << cap_name;
+        out << get_cap_name("iterator() {") << endl;
 
-      indent_up();
-      indent(out) << "return (this." << field_name << " == null) ? null : " <<
-        "this." << field_name << ".iterator();" << endl;
-      indent_down();
-      indent(out) << "}" << endl << endl;
+        indent_up();
+        indent(out) << "if (this." << field_name << " == null) {" << endl;
+        indent_up();
+        indent(out) << "return Option.none();" << endl;
+        indent_down();
+        indent(out) << "} else {" << endl;
+        indent_up();
+        indent(out) << "return Option.some(this." << field_name << ".iterator());" << endl;
+        indent_down();
+        indent(out) << "}" << endl;
+        indent_down();
+        indent(out) << "}" << endl << endl;
+      } else {
+        indent(out) << "public java.util.Iterator<" <<
+          type_name(element_type, true, false) <<  "> get" << cap_name;
+        out << get_cap_name("iterator() {") << endl;
+
+        indent_up();
+        indent(out) << "return (this." << field_name << " == null) ? null : " <<
+          "this." << field_name << ".iterator();" << endl;
+        indent_down();
+        indent(out) << "}" << endl << endl;
+      }
 
       // Add to set or list, create if the set/list is null
       indent(out);
@@ -1925,18 +1966,42 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out,
       indent(out) << "  return " << field_name << ";" << endl;
       indent(out) << "}" << endl << endl;
     } else {
-      indent(out) << "public " << type_name(type);
-      if (type->is_base_type() &&
-          ((t_base_type*)type)->get_base() == t_base_type::TYPE_BOOL) {
-        out << " is";
+      if (optional) {
+        indent(out) << "public Option<" << type_name(type, true) << ">";
+        if (type->is_base_type() &&
+            ((t_base_type*)type)->get_base() == t_base_type::TYPE_BOOL) {
+          out << " is";
+        } else {
+          out << " get";
+        }
+        out << cap_name << "() {" << endl;
+        indent_up();
+
+        indent(out) << "if (this.isSet" << cap_name << "()) {" << endl;
+        indent_up();
+        indent(out) << "return Option.some(this." << field_name << ");" << endl;
+        indent_down();
+        indent(out) << "} else {" << endl;
+        indent_up();
+        indent(out) << "return Option.none();" << endl;
+        indent_down();
+        indent(out) << "}" << endl;
+        indent_down();
+        indent(out) << "}" << endl << endl;
       } else {
-        out << " get";
+        indent(out) << "public " << type_name(type);
+        if (type->is_base_type() &&
+            ((t_base_type*)type)->get_base() == t_base_type::TYPE_BOOL) {
+          out << " is";
+        } else {
+          out << " get";
+        }
+        out << cap_name << "() {" << endl;
+        indent_up();
+        indent(out) << "return this." << field_name << ";" << endl;
+        indent_down();
+        indent(out) << "}" << endl << endl;
       }
-      out << cap_name << "() {" << endl;
-      indent_up();
-      indent(out) << "return this." << field_name << ";" << endl;
-      indent_down();
-      indent(out) << "}" << endl << endl;
     }
 
     // Simple setter
@@ -4248,6 +4313,7 @@ THRIFT_REGISTER_GENERATOR(java, "Java",
 "    nocamel:         Do not use CamelCase field accessors with beans.\n"
 "    hashcode:        Generate quality hashCode methods.\n"
 "    android_legacy:  Do not use java.io.IOException(throwable) (available for Android 2.3 and above).\n"
+"    option_type:     Wrap optional fields in an Option type.\n"
 "    java5:           Generate Java 1.5 compliant code (includes android_legacy flag).\n"
 "    sorted_containers:\n"
 "                     Use TreeSet/TreeMap instead of HashSet/HashMap as a implementation of set/map.\n"
