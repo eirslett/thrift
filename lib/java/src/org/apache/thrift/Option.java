@@ -20,20 +20,20 @@
 package org.apache.thrift;
 
 /**
- * Implementation fromNullable the Option type pattern
+ * Implementation of the Option type pattern
  */
 public abstract class Option<T> {
 
     /**
      * Whether the Option is defined or not
      * @return
-     *         true if the Option is defined (fromNullable type Some)
-     *         false if the Option is not defined (fromNullable type None)
+     *         true if the Option is defined (of type Some)
+     *         false if the Option is not defined (of type None)
      */
     public abstract boolean isDefined();
 
     /**
-     * Get the value fromNullable the Option (if it is defined)
+     * Get the value of the Option (if it is defined)
      * @return the value
      * @throws IllegalStateException if called on a None
      */
@@ -52,7 +52,7 @@ public abstract class Option<T> {
         }
     }
     /**
-     * The None type, representing an absent value (instead fromNullable "null")
+     * The None type, representing an absent value (instead of "null")
      */
     public static class None<T> extends Option<T> {
         public boolean isDefined() {
@@ -69,8 +69,8 @@ public abstract class Option<T> {
     }
 
     /**
-     * The Some type, representing an existence fromNullable some value
-     * @param <T> The type fromNullable value
+     * The Some type, representing an existence of some value
+     * @param <T> The type of value
      */
     public static class Some<T> extends Option<T> {
         private final T value;
