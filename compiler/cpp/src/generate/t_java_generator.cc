@@ -81,6 +81,9 @@ public:
       android_legacy_ = true;
     }
 
+    iter = parsed_options.find("pool");
+    pool_ = (iter != parsed_options.end());
+
     iter = parsed_options.find("reuse-objects");
     reuse_objects_ = (iter != parsed_options.end());
 
@@ -148,6 +151,7 @@ public:
   void generate_service_async_interface(t_service* tservice);
   void generate_service_helpers   (t_service* tservice);
   void generate_service_client    (t_service* tservice);
+  void generate_service_pooled_client(t_service* tservice);
   void generate_service_async_client(t_service* tservice);
   void generate_service_server    (t_service* tservice);
   void generate_service_async_server    (t_service* tservice);
@@ -319,6 +323,7 @@ public:
   bool fullcamel_style_;
   bool android_legacy_;
   bool java5_;
+  bool pool_;
   bool sorted_containers_;
   bool reuse_objects_;
 };
@@ -2271,6 +2276,9 @@ void t_java_generator::generate_service(t_service* tservice) {
   generate_service_interface(tservice);
   generate_service_async_interface(tservice);
   generate_service_client(tservice);
+  if(pool_){
+    generate_service_pooled_client(tservice);
+  }
   generate_service_async_client(tservice);
   generate_service_server(tservice);
   generate_service_async_server(tservice);
@@ -2499,6 +2507,84 @@ void t_java_generator::generate_service_client(t_service* tservice) {
       scope_down(f_service_);
       f_service_ << endl;
     }
+  }
+
+  indent_down();
+  indent(f_service_) << "}" << endl;
+}
+
+/**
+ * Generates a pooled client that sits on top of an ObjectPool<Client>
+ *
+ * @param tservice The service to generate a server for.
+ */
+void t_java_generator::generate_service_pooled_client(t_service* tservice) {
+  string extends = "";
+  string extends_client = "";
+  if (tservice->get_extends() == NULL) {
+    extends_client = "org.apache.thrift.TServiceClient";
+  } else {
+    extends = type_name(tservice->get_extends());
+    extends_client = extends + ".Client";
+  }
+
+  indent(f_service_) <<
+    "public static class PooledClient extends " << extends_client << " implements Iface {" << endl;
+  indent_up();
+  indent(f_service_) << "private final org.apache.commons.pool.ObjectPool<Client> clientPool;" << endl;
+  indent(f_service_) << "public PooledClient(org.apache.commons.pool.ObjectPool<Client> clientPool) {" << endl;
+  indent_up();
+  indent(f_service_) << "this.clientPool = clientPool;" << endl;
+  indent_down();
+  indent(f_service_) << "}" << endl;
+
+
+  // Generate client method implementations
+  vector<t_function*> functions = tservice->get_functions();
+  vector<t_function*>::const_iterator f_iter;
+  for (f_iter = functions.begin(); f_iter != functions.end(); ++f_iter) {
+    string funname = (*f_iter)->get_name();
+
+    // Open function
+    indent(f_service_) << "public " << function_signature(*f_iter) << endl;
+    scope_up(f_service_);
+    indent(f_service_) << "Client client = null;" << endl;
+    indent(f_service_) << "try {" << endl;
+    indent_up();
+    indent(f_service_) << "client = clientPool.borrowObject();" << endl;
+
+    indent(f_service_);
+    if(!(*f_iter)->is_oneway() && !(*f_iter)->get_returntype()->is_void()) {
+      f_service_ << "return ";
+    }
+
+    f_service_ << "client." << funname << "(";
+
+    // Get the struct of function call params
+    t_struct* arg_struct = (*f_iter)->get_arglist();
+
+    // Declare the function arguments
+    const vector<t_field*>& fields = arg_struct->get_members();
+    vector<t_field*>::const_iterator fld_iter;
+    bool first = true;
+    for (fld_iter = fields.begin(); fld_iter != fields.end(); ++fld_iter) {
+      if (first) {
+        first = false;
+      } else {
+        f_service_ << ", ";
+      }
+      f_service_ << (*fld_iter)->get_name();
+    }
+    f_service_ << ");" << endl;
+
+    indent_down();
+    indent(f_service_) << "} finally {" << endl;
+    indent_up();
+    indent(f_service_) << "if(client != null){ clientPool.returnObject(client); }" << endl;
+    indent_down();
+    indent(f_service_) << "}" << endl;
+    scope_down(f_service_);
+    f_service_ << endl;
   }
 
   indent_down();
@@ -4613,6 +4699,7 @@ THRIFT_REGISTER_GENERATOR(java, "Java",
 "    fullcamel:       Convert underscored_field_names to CamelCase.\n"
 "    android_legacy:  Do not use java.io.IOException(throwable) (available for Android 2.3 and above).\n"
 "    java5:           Generate Java 1.5 compliant code (includes android_legacy flag).\n"
+"    pool:            Will generate another Client that wraps an ObjectPool<Client> (from commons-pool).\n"
 "    reuse-objects:   Data objects will not be allocated, but existing instances will be used (read and write).\n"
 "    sorted_containers:\n"
 "                     Use TreeSet/TreeMap instead of HashSet/HashMap as a implementation of set/map.\n"
